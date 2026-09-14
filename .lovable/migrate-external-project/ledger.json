@@ -1,0 +1,19 @@
+{
+  "source": "github:maximilienbrussels/dev-helper-hub-9927a24c",
+  "capabilities": [
+    { "capability": "application code", "source": "TanStack Start + React 19", "outcome": "preserve", "status": "verified", "next_action": "" },
+    { "capability": "database schema", "source": "Neon Postgres (39 migrations)", "outcome": "preserve", "status": "verified", "next_action": "" },
+    { "capability": "records", "source": "Neon Postgres (live database)", "outcome": "preserve", "status": "verified", "next_action": "" },
+    { "capability": "auth identities", "source": "local auth (bcrypt/jose/passkeys) in Neon", "outcome": "preserve", "status": "implemented", "next_action": "real sign-in test by the user" },
+    { "capability": "authorization", "source": "user_roles / role_permissions tables", "outcome": "preserve", "status": "implemented", "next_action": "verify after sign-in" },
+    { "capability": "file storage", "source": "S3-compatible (Infomaniak)", "outcome": "preserve", "status": "implemented", "next_action": "verify an upload" },
+    { "capability": "payments", "source": "Stripe", "outcome": "preserve", "status": "implemented", "next_action": "verify a test checkout + webhook URL update" },
+    { "capability": "email", "source": "Brevo + SMTP", "outcome": "preserve", "status": "implemented", "next_action": "send a test email" },
+    { "capability": "social feed", "source": "Bluesky (AT Protocol)", "outcome": "preserve", "status": "verified", "next_action": "" },
+    { "capability": "AI features", "source": "Infomaniak AI / Lovable AI", "outcome": "preserve", "status": "implemented", "next_action": "INFOMANIAK_AI_API_KEY not yet supplied" },
+    { "capability": "google wallet passes", "source": "Google Wallet API", "outcome": "preserve", "status": "implemented", "next_action": "GOOGLE_WALLET_* secrets not yet supplied" },
+    { "capability": "oauth logins", "source": "Google / GitHub OAuth", "outcome": "preserve", "status": "implemented", "next_action": "GOOGLE_CLIENT_*, GITHUB_CLIENT_* not yet supplied + redirect URIs" },
+    { "capability": "public endpoints / webhooks", "source": "src/routes/api/public, stripe webhook", "outcome": "preserve", "status": "implemented", "next_action": "point providers at the new domain at cutover" },
+    { "capability": "cutover", "source": "Vercel deploy", "outcome": "defer", "status": "open", "next_action": "publish from Lovable and switch DNS when ready" }
+  ]
+}
