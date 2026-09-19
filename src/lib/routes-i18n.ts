@@ -6,8 +6,11 @@
 export type Lang = "nl" | "fr" | "en";
 export const LANGS: Lang[] = ["nl", "fr", "en"];
 export const DEFAULT_LANG: Lang = "nl"; // brontaal van de site en x-default
-/** Publiek klantendomein — élke mail en canonical link verwijst hierheen. */
-export const PUBLIC_SITE_URL = "https://maximilien.brussels";
+/**
+ * Publiek klantendomein — élke mail en canonical link verwijst hierheen.
+ * Instelbaar via VITE_PUBLIC_SITE_URL / PUBLIC_SITE_URL (zie site-url.ts).
+ */
+export const PUBLIC_SITE_URL = CANONICAL_SITE_URL;
 /** Intern beheerdomein (staff/admin only, nooit in publieke mails). */
 export const ADMIN_SITE_URL = "https://maximilien.site";
 export const SITE_URL = PUBLIC_SITE_URL;
