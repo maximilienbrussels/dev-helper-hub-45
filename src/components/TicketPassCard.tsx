@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { MapPin } from "lucide-react";
 import { handleImageError } from "@/lib/image-fallback";
+import { CANONICAL_SITE_URL } from "@/lib/site-url";
 
 export type TicketPassLocale = "nl" | "fr" | "en";
 
