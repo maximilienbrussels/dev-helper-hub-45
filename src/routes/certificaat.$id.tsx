@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { neonSupabaseCompat as supabase } from "@/lib/neon-auth-compat";
 import { handleImageError } from "@/lib/image-fallback";
 import { stashRedirect } from "@/lib/redirect";
+import { CANONICAL_SITE_URL } from "@/lib/site-url";
 
 /**
  * Houdt het certificaat 100% vloeiend: meet de beschikbare breedte en zet de
