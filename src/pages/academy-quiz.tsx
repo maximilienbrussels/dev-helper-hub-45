@@ -644,45 +644,100 @@ export function AcademyQuiz({ slug }: { slug: string }) {
                 </div>
               )}
 
-              <ul className="mt-6 space-y-3">
-                {vraagOpties(vraag, lang).map((opt, i) => {
-                  const active = antwoorden[vraag.id] === i;
-                  const isCorrect = fb && fb.correcte_index === i;
-                  const isWrongPick = fb && active && !fb.juist;
-                  return (
-                    <li key={i}>
-                      <button
-                        type="button"
-                        disabled={Boolean(fb)}
-                        onClick={() => void choose(vraag, i)}
-                        className={
-                          "flex w-full min-h-[56px] items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition sm:px-5 sm:py-4 " +
-                          (isCorrect
-                            ? "border-[color:var(--color-quiz-ok)] bg-[color:var(--color-quiz-ok)]/12 text-foreground"
-                            : isWrongPick
-                              ? "border-[color:var(--color-quiz-bad)] bg-[color:var(--color-quiz-bad)]/10 text-foreground"
-                              : active
-                                ? "border-[color:var(--color-terracotta-bright)] bg-[color:var(--color-terracotta-bright)]/15 text-foreground"
-                                : fb
-                                  ? "border-border bg-background opacity-70"
-                                  : "border-border bg-background hover:border-[color:var(--color-terracotta-bright)]")
-                        }
+              {vraag.vraag_type === "getal" ? (
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      disabled={Boolean(fb) || checking}
+                      value={fb ? (getallen[vraag.id] ?? "") : getalInvoer}
+                      onChange={(e) => setGetalInvoer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void chooseGetal(vraag);
+                      }}
+                      aria-label={vraagTekst(vraag, lang)}
+                      className={`h-14 max-w-[10rem] text-lg ${
+                        fb
+                          ? fb.juist
+                            ? "border-[color:var(--color-quiz-ok)]"
+                            : "border-[color:var(--color-quiz-bad)]"
+                          : ""
+                      }`}
+                    />
+                    {getalEenheid(vraag, lang) && (
+                      <span className="text-sm text-muted-foreground">
+                        {getalEenheid(vraag, lang)}
+                      </span>
+                    )}
+                    {!fb && (
+                      <Button
+                        variant="quiz"
+                        className="min-h-[48px] rounded-full px-6"
+                        disabled={checking || getalInvoer.trim() === ""}
+                        onClick={() => void chooseGetal(vraag)}
                       >
-                        <span className="mt-0.5 font-mono text-xs opacity-70">
-                          {String.fromCharCode(65 + i)}
-                        </span>
-                        <span className="min-w-0 flex-1 break-words">{opt}</span>
-                        {isCorrect && (
-                          <Check className="mt-0.5 size-4 shrink-0 text-[color:var(--color-quiz-ok)]" />
-                        )}
-                        {isWrongPick && (
-                          <X className="mt-0.5 size-4 shrink-0 text-[color:var(--color-quiz-bad)]" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        {t("aca.check")}
+                      </Button>
+                    )}
+                  </div>
+                  {fb && !fb.juist && typeof fb.correct_getal === "number" && (
+                    <p className="mt-3 text-sm text-[color:var(--color-quiz-bad)]">
+                      {fb.correct_getal} {getalEenheid(vraag, lang)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <ul className="mt-6 space-y-3">
+                  {vraagOpties(vraag, lang).map((opt, i) => {
+                    const active = antwoorden[vraag.id] === i;
+                    const isCorrect = fb && fb.correcte_index === i;
+                    const isWrongPick = fb && active && !fb.juist;
+                    // Tijdens het nakijken blijft de keuze neutraal: pas het
+                    // antwoord van de server kleurt groen of rood.
+                    const pending = active && !fb;
+                    return (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          disabled={Boolean(fb) || checking}
+                          onClick={() => void choose(vraag, i)}
+                          className={
+                            "flex w-full min-h-[56px] items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition sm:px-5 sm:py-4 " +
+                            (isCorrect
+                              ? "border-[color:var(--color-quiz-ok)] bg-[color:var(--color-quiz-ok)]/12 text-foreground"
+                              : isWrongPick
+                                ? "quiz-shake border-[color:var(--color-quiz-bad)] bg-[color:var(--color-quiz-bad)]/10 text-foreground"
+                                : pending
+                                  ? "border-border bg-muted text-foreground"
+                                  : fb
+                                    ? "border-border bg-background opacity-70"
+                                    : "border-border bg-background hover:border-[color:var(--color-terracotta-bright)]")
+                          }
+                        >
+                          <span className="mt-0.5 font-mono text-xs opacity-70">
+                            {String.fromCharCode(65 + i)}
+                          </span>
+                          <span className="min-w-0 flex-1 break-words">{opt}</span>
+                          {pending && (
+                            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+                          )}
+                          {isCorrect &&
+                            (isKids ? (
+                              <ThumbsUp className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-ok)]" />
+                            ) : (
+                              <Check className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-ok)]" />
+                            ))}
+                          {isWrongPick && (
+                            <X className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-bad)]" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
               {checking && (
                 <p className="mt-4 flex items-center text-xs text-muted-foreground">
