@@ -17,7 +17,7 @@ export const PASS_BRAND = {
   background: "#1D3528",
   logo: "https://maximilien.dlp.li/logo.png",
   address: "Schipperijkaai 2, 1000 Brussel",
-  verifyBase: "https://maximilien.brussels/verify?id=",
+  verifyBase: `${CANONICAL_SITE_URL}/verify?id=`,
 } as const;
 
 export const PASS_COPY: Record<

@@ -384,7 +384,8 @@ export const submitExamen = createServerFn({ method: "POST" })
             badge_icon: string | null;
           }>
         )[0]?.badge_icon;
-        const origin = process.env.SITE_URL || "https://maximilien.brussels";
+        const { CANONICAL_SITE_URL } = await import("./site-url");
+        const origin = CANONICAL_SITE_URL;
         const { subject, html } = certificateEmail({
           naam: data.volledige_naam,
           academy: academy.diersoort_naam,
