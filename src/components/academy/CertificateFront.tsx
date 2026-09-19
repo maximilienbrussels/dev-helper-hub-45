@@ -45,7 +45,7 @@ export function CertificateFront({
       style={{ colorScheme: "light" }}
       data-static-theme="light"
       className={
-        "cert-page cert-isolate cert-frame relative select-text overflow-hidden rounded-none bg-[#FDFBF7] text-[#1A2E1E] print:shadow-none"
+        "cert-reveal cert-page cert-isolate cert-frame relative select-text overflow-hidden rounded-none bg-[#FDFBF7] text-[#1A2E1E] print:shadow-none"
       }
     >
       <div className="cert-scale cert-front bg-[#FDFBF7] bg-[radial-gradient(circle_at_15%_20%,rgba(122,111,74,.06),transparent_50%),radial-gradient(circle_at_85%_80%,rgba(74,93,53,.05),transparent_55%)]">
