@@ -526,6 +526,11 @@ export function AcademyQuiz({ slug }: { slug: string }) {
   const moduleVragen = vragenPerModule.get(huidigeModule) ?? [];
   const vraag = moduleVragen[qIdx];
   const fb = vraag ? feedback[vraag.id] : undefined;
+  // Bij een nieuwe vraag stopt het voorlezen van de vorige meteen.
+  const gelezenId = vraag?.id;
+  useEffect(() => {
+    speech.stop();
+  }, [gelezenId, speech.stop]);
   const feedbackTekst = fb ? wistJeDat(fb, lang) : null;
   const allAnswered = vragen.every((v) => feedback[v.id] !== undefined);
 
