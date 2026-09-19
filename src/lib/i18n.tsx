@@ -361,6 +361,7 @@ const NL: Dict = {
   "aca.wrong": "Niet juist",
   "aca.didYouKnow": "Wist je dat?",
   "aca.continue": "Verder →",
+  "aca.check": "Nakijken",
 
   "aca.question": "Vraag {i} / {n}",
   "aca.prev": "Vorige",
@@ -786,6 +787,7 @@ const FR: Dict = {
   "aca.wrong": "Incorrect",
   "aca.didYouKnow": "Le saviez-vous ?",
   "aca.continue": "Continuer →",
+  "aca.check": "Vérifier",
 
   "aca.question": "Question {i} / {n}",
   "aca.prev": "Précédent",
@@ -1221,6 +1223,7 @@ const EN: Dict = {
   "aca.wrong": "Not correct",
   "aca.didYouKnow": "Did you know?",
   "aca.continue": "Continue →",
+  "aca.check": "Check",
 
   "aca.question": "Question {i} / {n}",
   "aca.prev": "Previous",

@@ -220,7 +220,7 @@ export function KidsCertificate({
     <div>
       <div
         id="certificate-print-area"
-        className="mx-auto w-full max-w-3xl overflow-hidden rounded-3xl shadow-[0_14px_40px_rgba(0,0,0,0.10)] print:max-w-none print:rounded-none print:shadow-none"
+        className="cert-reveal-kids mx-auto w-full max-w-3xl overflow-hidden rounded-3xl shadow-[0_14px_40px_rgba(0,0,0,0.10)] print:max-w-none print:rounded-none print:shadow-none"
       >
         <div ref={frameRef} className="cert-isolate cert-frame cert-page relative">
           <div className="cert-scale" style={{ backgroundColor: KIDS_PALETTE.cream }}>

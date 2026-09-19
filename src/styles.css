@@ -841,3 +841,77 @@ body.quiz-focus header[data-site-header] {
   animation: maxim-pop 180ms cubic-bezier(0.22, 1, 0.36, 1);
   transform-origin: bottom right;
 }
+
+/* ---- Academy: reacties op een antwoord ---- */
+/* Het pictogram draait één keer rond en zet zich vast: meteen duidelijk juist/fout. */
+@keyframes quiz-stamp {
+  0% {
+    opacity: 0;
+    transform: rotate(-180deg) scale(0.3);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(12deg) scale(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.quiz-stamp {
+  animation: quiz-stamp 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Kort schudden bij een fout antwoord. */
+@keyframes quiz-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+.quiz-shake {
+  animation: quiz-shake 320ms ease-in-out;
+}
+
+/* Diploma onthult zich: speels voor kinderen, rustig voor 16+. */
+@keyframes cert-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cert-reveal {
+  animation: cert-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cert-reveal-kids {
+  animation: cert-reveal 900ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quiz-stamp,
+  .quiz-shake,
+  .cert-reveal,
+  .cert-reveal-kids {
+    animation: none;
+  }
+}

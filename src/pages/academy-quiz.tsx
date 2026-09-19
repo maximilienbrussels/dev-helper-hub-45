@@ -24,7 +24,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { lovable } from "@/integrations/lovable";
-import { Check, Loader2, Pencil, Save, Share2, Volume2, VolumeX, X } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  Pencil,
+  Save,
+  Share2,
+  ThumbsUp,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { AnimalIcon } from "@/lib/animal-glyph";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -36,6 +46,7 @@ import { kidsCertCode } from "@/lib/kids-cert";
 import { KidsCertificate } from "@/components/academy/KidsCertificate";
 import { handleImageError } from "@/lib/image-fallback";
 import { stashRedirect } from "@/lib/redirect";
+import { blijGeluid, confetti, confettiRegen } from "@/lib/celebrate";
 
 type Vraag = {
   id: string;
@@ -46,9 +57,12 @@ type Vraag = {
   opties_fr?: string[] | null;
   opties_en?: string[] | null;
   module?: number;
-  vraag_type?: "tekst" | "beeld" | "audio";
+  vraag_type?: "tekst" | "beeld" | "audio" | "getal";
   media_url?: string | null;
   media_alt?: string | null;
+  getal_eenheid?: string | null;
+  getal_eenheid_fr?: string | null;
+  getal_eenheid_en?: string | null;
 };
 type Academy = {
   id: string;
@@ -64,6 +78,7 @@ type Academy = {
 type Feedback = {
   juist: boolean;
   correcte_index: number;
+  correct_getal?: number | null;
   wist_je_dat?: string | null;
   wist_je_dat_fr?: string | null;
   wist_je_dat_en?: string | null;
@@ -138,8 +153,13 @@ export function AcademyQuiz({ slug }: { slug: string }) {
   const [academy, setAcademy] = useState<Academy | null>(null);
   const [vragen, setVragen] = useState<Vraag[]>([]);
   const [antwoorden, setAntwoorden] = useState<Record<string, number>>({});
+  /** Ingevulde getallen bij vragen van het type "getal". */
+  const [getallen, setGetallen] = useState<Record<string, number>>({});
+  const [getalInvoer, setGetalInvoer] = useState("");
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const [checking, setChecking] = useState(false);
+  /** Sessiesleutel: bepaalt de geschudde antwoordvolgorde op de server. */
+  const [sessie, setSessie] = useState("");
   const [moduleIdx, setModuleIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
   const [passedModules, setPassedModules] = useState<number[]>([]);
@@ -190,7 +210,10 @@ export function AcademyQuiz({ slug }: { slug: string }) {
       .then((res) => {
         setAcademy(res.academy as Academy);
         setVragen(res.vragen as Vraag[]);
+        setSessie(res.sessie);
         setAntwoorden({});
+        setGetallen({});
+        setGetalInvoer("");
         setFeedback({});
         setPassedModules([]);
         setModuleIdx(0);
@@ -292,17 +315,23 @@ export function AcademyQuiz({ slug }: { slug: string }) {
       return submitFn({
         data: {
           academy_id: academy!.id,
+          sessie,
+          doelgroep: doelgroep ?? "16plus",
           volledige_naam: naam,
-          antwoorden: vragen.map((v) => ({
-            vraag_id: v.id,
-            gekozen_index: antwoorden[v.id] ?? -1,
-          })),
+          antwoorden: vragen.map((v) =>
+            v.vraag_type === "getal"
+              ? Number.isFinite(getallen[v.id])
+                ? { vraag_id: v.id, getal: getallen[v.id] as number }
+                : { vraag_id: v.id }
+              : { vraag_id: v.id, gekozen_index: antwoorden[v.id] ?? -1 },
+          ),
         },
       });
     },
     onSuccess: (res) => {
       if (res.geslaagd) {
         toast.success(formatT(t("aca.passed"), { n: res.certificaat.volgnummer }));
+        confettiRegen();
         navigate({ to: "/certificaat/$id", params: { id: res.certificaat.id } });
       } else {
         toast.error(formatT(t("aca.failed"), { s: res.score }));
@@ -332,18 +361,53 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     }
   }
 
+  /** Viert een juist antwoord: uitbundig voor kinderen, ingetogen voor 16+. */
+  function vier(juist: boolean) {
+    if (!juist) return;
+    if (isKids) {
+      confetti({ y: 0.55, aantal: 60 });
+      blijGeluid();
+    }
+  }
+
   /** Antwoord kiezen: vergrendelt de vraag en haalt directe feedback op. */
   async function choose(vraag: Vraag, index: number) {
     if (feedback[vraag.id] || checking) return;
     setAntwoorden((a) => ({ ...a, [vraag.id]: index }));
     setChecking(true);
     try {
-      const res = await checkFn({ data: { vraag_id: vraag.id, gekozen_index: index } });
-      setFeedback((f) => ({ ...f, [vraag.id]: res as Feedback }));
+      const res = (await checkFn({
+        data: { vraag_id: vraag.id, sessie, gekozen_index: index },
+      })) as Feedback;
+      setFeedback((f) => ({ ...f, [vraag.id]: res }));
+      vier(res.juist);
     } catch {
       setFeedback((f) => ({
         ...f,
         [vraag.id]: { juist: true, correcte_index: index } as Feedback,
+      }));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  /** Getalvraag beantwoorden: enkel cijfers, met de marge die de server bewaakt. */
+  async function chooseGetal(vraag: Vraag) {
+    if (feedback[vraag.id] || checking) return;
+    const waarde = Number(getalInvoer.replace(",", "."));
+    if (!Number.isFinite(waarde)) return;
+    setGetallen((g) => ({ ...g, [vraag.id]: waarde }));
+    setChecking(true);
+    try {
+      const res = (await checkFn({
+        data: { vraag_id: vraag.id, sessie, getal: waarde },
+      })) as Feedback;
+      setFeedback((f) => ({ ...f, [vraag.id]: res }));
+      vier(res.juist);
+    } catch {
+      setFeedback((f) => ({
+        ...f,
+        [vraag.id]: { juist: true, correcte_index: -1 } as Feedback,
       }));
     } finally {
       setChecking(false);
@@ -356,6 +420,7 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     const rows = vragenPerModule.get(m) ?? [];
     if (qIdx < rows.length - 1) {
       setQIdx((i) => i + 1);
+      setGetalInvoer("");
       return;
     }
     const ok = rows.filter((v) => feedback[v.id]?.juist).length;
@@ -420,7 +485,7 @@ export function AcademyQuiz({ slug }: { slug: string }) {
   const vraag = moduleVragen[qIdx];
   const fb = vraag ? feedback[vraag.id] : undefined;
   const feedbackTekst = fb ? wistJeDat(fb, lang) : null;
-  const allAnswered = vragen.every((v) => antwoorden[v.id] !== undefined);
+  const allAnswered = vragen.every((v) => feedback[v.id] !== undefined);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[color:var(--surface-page)] text-foreground">
@@ -580,45 +645,100 @@ export function AcademyQuiz({ slug }: { slug: string }) {
                 </div>
               )}
 
-              <ul className="mt-6 space-y-3">
-                {vraagOpties(vraag, lang).map((opt, i) => {
-                  const active = antwoorden[vraag.id] === i;
-                  const isCorrect = fb && fb.correcte_index === i;
-                  const isWrongPick = fb && active && !fb.juist;
-                  return (
-                    <li key={i}>
-                      <button
-                        type="button"
-                        disabled={Boolean(fb)}
-                        onClick={() => void choose(vraag, i)}
-                        className={
-                          "flex w-full min-h-[56px] items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition sm:px-5 sm:py-4 " +
-                          (isCorrect
-                            ? "border-[color:var(--color-quiz-ok)] bg-[color:var(--color-quiz-ok)]/12 text-foreground"
-                            : isWrongPick
-                              ? "border-[color:var(--color-quiz-bad)] bg-[color:var(--color-quiz-bad)]/10 text-foreground"
-                              : active
-                                ? "border-[color:var(--color-terracotta-bright)] bg-[color:var(--color-terracotta-bright)]/15 text-foreground"
-                                : fb
-                                  ? "border-border bg-background opacity-70"
-                                  : "border-border bg-background hover:border-[color:var(--color-terracotta-bright)]")
-                        }
+              {vraag.vraag_type === "getal" ? (
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      disabled={Boolean(fb) || checking}
+                      value={fb ? (getallen[vraag.id] ?? "") : getalInvoer}
+                      onChange={(e) => setGetalInvoer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void chooseGetal(vraag);
+                      }}
+                      aria-label={vraagTekst(vraag, lang)}
+                      className={`h-14 max-w-[10rem] text-lg ${
+                        fb
+                          ? fb.juist
+                            ? "border-[color:var(--color-quiz-ok)]"
+                            : "border-[color:var(--color-quiz-bad)]"
+                          : ""
+                      }`}
+                    />
+                    {getalEenheid(vraag, lang) && (
+                      <span className="text-sm text-muted-foreground">
+                        {getalEenheid(vraag, lang)}
+                      </span>
+                    )}
+                    {!fb && (
+                      <Button
+                        variant="quiz"
+                        className="min-h-[48px] rounded-full px-6"
+                        disabled={checking || getalInvoer.trim() === ""}
+                        onClick={() => void chooseGetal(vraag)}
                       >
-                        <span className="mt-0.5 font-mono text-xs opacity-70">
-                          {String.fromCharCode(65 + i)}
-                        </span>
-                        <span className="min-w-0 flex-1 break-words">{opt}</span>
-                        {isCorrect && (
-                          <Check className="mt-0.5 size-4 shrink-0 text-[color:var(--color-quiz-ok)]" />
-                        )}
-                        {isWrongPick && (
-                          <X className="mt-0.5 size-4 shrink-0 text-[color:var(--color-quiz-bad)]" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        {t("aca.check")}
+                      </Button>
+                    )}
+                  </div>
+                  {fb && !fb.juist && typeof fb.correct_getal === "number" && (
+                    <p className="mt-3 text-sm text-[color:var(--color-quiz-bad)]">
+                      {fb.correct_getal} {getalEenheid(vraag, lang)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <ul className="mt-6 space-y-3">
+                  {vraagOpties(vraag, lang).map((opt, i) => {
+                    const active = antwoorden[vraag.id] === i;
+                    const isCorrect = fb && fb.correcte_index === i;
+                    const isWrongPick = fb && active && !fb.juist;
+                    // Tijdens het nakijken blijft de keuze neutraal: pas het
+                    // antwoord van de server kleurt groen of rood.
+                    const pending = active && !fb;
+                    return (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          disabled={Boolean(fb) || checking}
+                          onClick={() => void choose(vraag, i)}
+                          className={
+                            "flex w-full min-h-[56px] items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition sm:px-5 sm:py-4 " +
+                            (isCorrect
+                              ? "border-[color:var(--color-quiz-ok)] bg-[color:var(--color-quiz-ok)]/12 text-foreground"
+                              : isWrongPick
+                                ? "quiz-shake border-[color:var(--color-quiz-bad)] bg-[color:var(--color-quiz-bad)]/10 text-foreground"
+                                : pending
+                                  ? "border-border bg-muted text-foreground"
+                                  : fb
+                                    ? "border-border bg-background opacity-70"
+                                    : "border-border bg-background hover:border-[color:var(--color-terracotta-bright)]")
+                          }
+                        >
+                          <span className="mt-0.5 font-mono text-xs opacity-70">
+                            {String.fromCharCode(65 + i)}
+                          </span>
+                          <span className="min-w-0 flex-1 break-words">{opt}</span>
+                          {pending && (
+                            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+                          )}
+                          {isCorrect &&
+                            (isKids ? (
+                              <ThumbsUp className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-ok)]" />
+                            ) : (
+                              <Check className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-ok)]" />
+                            ))}
+                          {isWrongPick && (
+                            <X className="quiz-stamp mt-0.5 size-5 shrink-0 text-[color:var(--color-quiz-bad)]" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
               {checking && (
                 <p className="mt-4 flex items-center text-xs text-muted-foreground">
@@ -860,7 +980,10 @@ export function AcademyQuiz({ slug }: { slug: string }) {
               variant="outline"
               className="min-h-[48px] rounded-full px-6"
               disabled={qIdx === 0}
-              onClick={() => setQIdx((i) => Math.max(0, i - 1))}
+              onClick={() => {
+                setGetalInvoer("");
+                setQIdx((i) => Math.max(0, i - 1));
+              }}
             >
               {t("aca.prev")}
             </Button>
@@ -1043,4 +1166,13 @@ function DoelgroepKiezer({
       </main>
     </div>
   );
+}
+
+/** Eenheid bij een getalvraag ("keer per dag", "gram", …) in de juiste taal. */
+function getalEenheid(
+  v: { getal_eenheid?: string | null; getal_eenheid_fr?: string | null; getal_eenheid_en?: string | null },
+  lang: ReturnType<typeof useT>["lang"],
+): string {
+  const byLang = lang === "fr" ? v.getal_eenheid_fr : lang === "en" ? v.getal_eenheid_en : null;
+  return (byLang && byLang.trim()) || (v.getal_eenheid ?? "").trim();
 }
