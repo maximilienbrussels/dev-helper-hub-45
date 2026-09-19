@@ -141,13 +141,7 @@ export function mailOrigin(override?: string): string {
   const raw = (override || PUBLIC_SITE_URL).replace(/\/+$/, "");
   // Publieke mails linken uitsluitend naar het klantendomein; het .site-domein
   // (beheerportaal) en onbekende hosts worden altijd vervangen.
-  try {
-    const host = new URL(raw).hostname;
-    const ok = host === "maximilien.brussels" || host.endsWith(".maximilien.brussels");
-    return ok ? raw : PUBLIC_SITE_URL;
-  } catch {
-    return PUBLIC_SITE_URL;
-  }
+  return isCanonicalHost(raw) ? raw : PUBLIC_SITE_URL;
 }
 
 /** Absolute publieke link naar een pagina, in de juiste taal. */

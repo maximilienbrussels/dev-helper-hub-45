@@ -3,6 +3,8 @@
  * Elke pagina heeft per taal een eigen slug: /nl/bezoek, /fr/visite, /en/visit ...
  */
 
+import { CANONICAL_SITE_URL } from "./site-url";
+
 export type Lang = "nl" | "fr" | "en";
 export const LANGS: Lang[] = ["nl", "fr", "en"];
 export const DEFAULT_LANG: Lang = "nl"; // brontaal van de site en x-default
