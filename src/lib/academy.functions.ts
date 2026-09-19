@@ -251,8 +251,14 @@ export const submitExamen = createServerFn({ method: "POST" })
     z
       .object({
         academy_id: z.string().uuid(),
+        sessie: z.string().min(1).max(64),
+        doelgroep: z.enum(["kids", "16plus"]).default("16plus"),
         antwoorden: z.array(
-          z.object({ vraag_id: z.string().uuid(), gekozen_index: z.number().int().min(0) }),
+          z.object({
+            vraag_id: z.string().uuid(),
+            gekozen_index: z.number().int().min(-1).optional(),
+            getal: z.number().finite().optional(),
+          }),
         ),
         volledige_naam: z.string().min(1).max(120),
       })
@@ -264,7 +270,8 @@ export const submitExamen = createServerFn({ method: "POST" })
 
     const academy = (
       (await sql`
-      select id, diersoort_naam, slug, slaag_grens, vragen_per_test
+      select id, diersoort_naam, slug, slaag_grens, vragen_per_test,
+             slaag_grens_kids, slaag_grens_16plus
         from academies
        where id = ${data.academy_id}
        limit 1
@@ -274,6 +281,8 @@ export const submitExamen = createServerFn({ method: "POST" })
         slug: string;
         slaag_grens: number;
         vragen_per_test: number;
+        slaag_grens_kids: number | null;
+        slaag_grens_16plus: number | null;
       }>
     )[0];
     if (!academy) throw new Error("Academy bestaat niet");
@@ -281,25 +290,42 @@ export const submitExamen = createServerFn({ method: "POST" })
     // Score altijd server-side hertellen op basis van de opgeslagen vragen.
     const ids = data.antwoorden.map((a) => a.vraag_id);
     const vragen = (await sql`
-      select id, correcte_optie_index
+      select id, correcte_optie_index, opties, vraag_type, correct_getal, getal_marge
         from academy_vragen
        where academy_id = ${academy.id} and id = any(${ids}::uuid[])
-    `) as Array<{ id: string; correcte_optie_index: number }>;
+    `) as Array<{
+      id: string;
+      correcte_optie_index: number;
+      opties: unknown;
+      vraag_type: string | null;
+      correct_getal: string | number | null;
+      getal_marge: string | number | null;
+    }>;
 
-    const map = new Map<string, number>();
-    for (const v of vragen ?? []) map.set(v.id, v.correcte_optie_index);
+    const map = new Map(vragen?.map((v) => [v.id, v]) ?? []);
 
     let correct = 0;
     let totaal = 0;
     for (const a of data.antwoorden) {
-      if (!map.has(a.vraag_id)) continue;
+      const v = map.get(a.vraag_id);
+      if (!v) continue;
       totaal++;
-      if (map.get(a.vraag_id) === a.gekozen_index) correct++;
+      const oordeel = await beoordeel(v, {
+        sessie: data.sessie,
+        vraag_id: a.vraag_id,
+        gekozen_index: a.gekozen_index,
+        getal: a.getal,
+      });
+      if (oordeel.juist) correct++;
     }
     if (totaal === 0) throw new Error("Geen geldige antwoorden");
 
+    const grensSpoor =
+      (data.doelgroep === "kids" ? academy.slaag_grens_kids : academy.slaag_grens_16plus) ??
+      academy.slaag_grens;
+    const slaagGrens = Math.max(1, Math.min(grensSpoor, totaal));
     const score = `${correct}/${totaal}`;
-    const geslaagd = correct >= academy.slaag_grens;
+    const geslaagd = correct >= slaagGrens;
 
     if (!geslaagd) {
       return {
