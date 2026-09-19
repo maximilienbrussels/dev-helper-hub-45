@@ -333,7 +333,7 @@ export const submitExamen = createServerFn({ method: "POST" })
         score,
         correct,
         totaal,
-        slaag_grens: academy.slaag_grens,
+        slaag_grens: slaagGrens,
       };
     }
 
