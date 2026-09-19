@@ -980,7 +980,10 @@ export function AcademyQuiz({ slug }: { slug: string }) {
               variant="outline"
               className="min-h-[48px] rounded-full px-6"
               disabled={qIdx === 0}
-              onClick={() => setQIdx((i) => Math.max(0, i - 1))}
+              onClick={() => {
+                setGetalInvoer("");
+                setQIdx((i) => Math.max(0, i - 1));
+              }}
             >
               {t("aca.prev")}
             </Button>
