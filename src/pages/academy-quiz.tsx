@@ -640,31 +640,64 @@ export function AcademyQuiz({ slug }: { slug: string }) {
                   {vraagTekst(vraag, lang)}
                 </h1>
                 {speech.supported && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      speech.speaking
-                        ? speech.stop()
-                        : speech.speak(
-                            [vraagTekst(vraag, lang), ...vraagOpties(vraag, lang)].join(". "),
-                          )
-                    }
-                    aria-label={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
-                    title={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
-                    className={`grid size-11 shrink-0 place-items-center rounded-full border transition ${
-                      speech.speaking
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border text-muted-foreground hover:text-primary"
-                    }`}
-                  >
-                    {speech.speaking ? (
-                      <VolumeX className="size-5" />
-                    ) : (
-                      <Volume2 className="size-5" />
-                    )}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        speech.speaking
+                          ? speech.stop()
+                          : speech.speak(
+                              [
+                                vraagTekst(vraag, lang),
+                                ...vraagOpties(vraag, lang),
+                                feedbackTekst ?? "",
+                              ]
+                                .filter(Boolean)
+                                .join(". "),
+                            )
+                      }
+                      aria-label={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
+                      title={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
+                      className={`grid size-11 shrink-0 place-items-center rounded-full border transition ${
+                        speech.speaking
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:text-primary"
+                      }`}
+                    >
+                      {speech.speaking ? (
+                        <VolumeX className="size-5" />
+                      ) : (
+                        <Volume2 className="size-5" />
+                      )}
+                    </button>
+                    {/* Voorleessnelheid: traag → normaal → snel, wordt onthouden. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const i = SPEECH_RATES.indexOf(
+                          speech.rate as (typeof SPEECH_RATES)[number],
+                        );
+                        const next = SPEECH_RATES[(i + 1) % SPEECH_RATES.length] ?? 0.95;
+                        speech.setRate(next);
+                        speech.stop();
+                      }}
+                      aria-label={t("aca.speed")}
+                      title={t("aca.speed")}
+                      className="h-11 shrink-0 rounded-full border border-border px-3 text-xs font-semibold text-muted-foreground transition hover:text-primary"
+                    >
+                      {speech.rate === SPEECH_RATES[0]
+                        ? t("aca.speed.slow")
+                        : speech.rate === SPEECH_RATES[2]
+                          ? t("aca.speed.fast")
+                          : t("aca.speed.normal")}
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {speech.stemOntbreekt && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("aca.noVoice")}</p>
+              )}
 
               {vraag.vraag_type === "beeld" && vraag.media_url && (
                 <img onError={handleImageError}
