@@ -210,7 +210,10 @@ export function AcademyQuiz({ slug }: { slug: string }) {
       .then((res) => {
         setAcademy(res.academy as Academy);
         setVragen(res.vragen as Vraag[]);
+        setSessie(res.sessie);
         setAntwoorden({});
+        setGetallen({});
+        setGetalInvoer("");
         setFeedback({});
         setPassedModules([]);
         setModuleIdx(0);
@@ -312,11 +315,14 @@ export function AcademyQuiz({ slug }: { slug: string }) {
       return submitFn({
         data: {
           academy_id: academy!.id,
+          sessie,
+          doelgroep: doelgroep ?? "16plus",
           volledige_naam: naam,
-          antwoorden: vragen.map((v) => ({
-            vraag_id: v.id,
-            gekozen_index: antwoorden[v.id] ?? -1,
-          })),
+          antwoorden: vragen.map((v) =>
+            v.vraag_type === "getal"
+              ? { vraag_id: v.id, getal: getallen[v.id] ?? Number.NaN }
+              : { vraag_id: v.id, gekozen_index: antwoorden[v.id] ?? -1 },
+          ),
         },
       });
     },
