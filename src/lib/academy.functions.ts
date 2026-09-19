@@ -73,14 +73,25 @@ export const startExamen = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const sql = db();
+    const { kiesVragen, aantalRondes } = await import("./academy-selectie");
+    const { optiePermutatie, schudOpties, nieuweSessie } = await import("./academy-shuffle");
+
     const academy = (
       (await sql`
       select id, diersoort_naam, diersoort_naam_fr, diersoort_naam_en, slug, badge_icon,
-             vragen_per_test, slaag_grens, beschrijving, beschrijving_fr, beschrijving_en
+             vragen_per_test, slaag_grens, beschrijving, beschrijving_fr, beschrijving_en,
+             vragen_per_test_kids, vragen_per_test_16plus, slaag_grens_kids, slaag_grens_16plus
         from academies
        where slug = ${data.slug} and is_active = true and status = 'gepubliceerd'
        limit 1
-    `) as AcademyRow[]
+    `) as Array<
+        AcademyRow & {
+          vragen_per_test_kids: number | null;
+          vragen_per_test_16plus: number | null;
+          slaag_grens_kids: number | null;
+          slaag_grens_16plus: number | null;
+        }
+      >
     )[0];
     if (!academy) throw new Error("Academy niet gevonden");
 
@@ -97,94 +108,126 @@ export const startExamen = createServerFn({ method: "POST" })
       media_url: string | null;
       media_alt: string | null;
       doelgroep: string | null;
+      variant_groep: string | null;
+      verplicht: boolean;
+      moeilijkheid: number | null;
+      getal_eenheid: string | null;
+      getal_eenheid_fr: string | null;
+      getal_eenheid_en: string | null;
     };
     const vragen = (await sql`
       select id, vraag_tekst, vraag_tekst_fr, vraag_tekst_en, opties, opties_fr, opties_en,
-             module, vraag_type, media_url, media_alt, doelgroep
+             module, vraag_type, media_url, media_alt, doelgroep,
+             variant_groep, coalesce(verplicht, false) as verplicht, moeilijkheid,
+             getal_eenheid, getal_eenheid_fr, getal_eenheid_en
         from academy_vragen
        where academy_id = ${academy.id}
     `) as Row[];
 
-    const shuffle = (arr: Row[]) => {
-      const pool = arr.slice();
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-      return pool;
-    };
+    const gewenst =
+      (data.doelgroep === "kids" ? academy.vragen_per_test_kids : academy.vragen_per_test_16plus) ??
+      academy.vragen_per_test;
+    const aantal = Math.max(1, Math.min(gewenst, (vragen ?? []).length || gewenst));
+    const slaagGrens =
+      (data.doelgroep === "kids" ? academy.slaag_grens_kids : academy.slaag_grens_16plus) ??
+      academy.slaag_grens;
 
-    // Verdeel het examen gelijk over de 3 modules (bv. 12 vragen => 4 per module).
-    // Toon enkel vragen van het gekozen spoor (kids of 16+) plus de gedeelde vragen.
-    const alle = vragen ?? [];
-    const spoor = alle.filter(
-      (v) => (v.doelgroep ?? "beide") === data.doelgroep || (v.doelgroep ?? "beide") === "beide",
-    );
-    // Val terug op alle vragen wanneer het spoor te weinig vragen heeft voor een volledige test.
-    const all = spoor.length >= academy.vragen_per_test ? spoor : alle;
-    const perModule = Math.max(1, Math.round(academy.vragen_per_test / 3));
-    const selected: Row[] = [];
-    for (const m of [1, 2, 3]) {
-      selected.push(...shuffle(all.filter((v) => (v.module ?? 1) === m)).slice(0, perModule));
-    }
-    // Vul aan als een module te weinig vragen heeft.
-    if (selected.length < academy.vragen_per_test) {
-      const chosen = new Set(selected.map((v) => v.id));
-      selected.push(
-        ...shuffle(all.filter((v) => !chosen.has(v.id))).slice(
-          0,
-          academy.vragen_per_test - selected.length,
-        ),
-      );
-    }
-    // Vraagvolgorde zelf ook willekeurig maken, maar wél gegroepeerd per module
-    // zodat de opbouw van het examen (module 1 -> 2 -> 3) behouden blijft.
-    selected.sort((a, b) => (a.module ?? 1) - (b.module ?? 1));
-    const gemengd: Row[] = [];
-    for (const m of [1, 2, 3]) {
-      gemengd.push(...shuffle(selected.filter((v) => (v.module ?? 1) === m)));
-    }
-    gemengd.push(...selected.filter((v) => ![1, 2, 3].includes(v.module ?? 1)));
-    selected.length = 0;
-    selected.push(...gemengd);
+    const selected = kiesVragen(vragen ?? [], { doelgroep: data.doelgroep, aantal });
+    const sessie = nieuweSessie();
 
     return {
-      academy,
+      academy: {
+        ...academy,
+        // De grens die in dit spoor telt (nooit hoger dan het aantal vragen).
+        slaag_grens: Math.max(1, Math.min(slaagGrens, selected.length)),
+      },
+      sessie,
+      rondes: aantalRondes(data.doelgroep),
       doelgroep: data.doelgroep,
-      vragen: selected.map((v) => ({
-        id: v.id,
-        vraag_tekst: v.vraag_tekst,
-        vraag_tekst_fr: v.vraag_tekst_fr,
-        vraag_tekst_en: v.vraag_tekst_en,
-        opties: v.opties as string[],
-        opties_fr: (v.opties_fr as string[] | null) ?? null,
-        opties_en: (v.opties_en as string[] | null) ?? null,
-        module: (v.module ?? 1) as number,
-        vraag_type: (v.vraag_type ?? "tekst") as "tekst" | "beeld" | "audio",
-        media_url: normalizePublicImageUrl(v.media_url),
-        media_alt: v.media_alt ?? null,
-      })),
+      vragen: selected.map((v) => {
+        const type = (v.vraag_type ?? "tekst") as "tekst" | "beeld" | "audio" | "getal";
+        const nl = (v.opties as string[] | null) ?? [];
+        const fr = (v.opties_fr as string[] | null) ?? null;
+        const en = (v.opties_en as string[] | null) ?? null;
+        // Getalvragen hebben geen opties en dus geen permutatie.
+        const perm = type === "getal" ? [] : optiePermutatie(sessie, v.id, nl.length);
+        return {
+          id: v.id,
+          vraag_tekst: v.vraag_tekst,
+          vraag_tekst_fr: v.vraag_tekst_fr,
+          vraag_tekst_en: v.vraag_tekst_en,
+          opties: type === "getal" ? [] : schudOpties(nl, perm),
+          opties_fr: fr && fr.length === nl.length ? schudOpties(fr, perm) : null,
+          opties_en: en && en.length === nl.length ? schudOpties(en, perm) : null,
+          module: (v.module ?? 1) as number,
+          vraag_type: type,
+          media_url: normalizePublicImageUrl(v.media_url),
+          media_alt: v.media_alt ?? null,
+          getal_eenheid: v.getal_eenheid,
+          getal_eenheid_fr: v.getal_eenheid_fr,
+          getal_eenheid_en: v.getal_eenheid_en,
+        };
+      }),
     };
-
   });
+
+/** Bepaalt of één antwoord juist is; werkt voor meerkeuze én getalvragen. */
+async function beoordeel(
+  vraag: {
+    vraag_type: string | null;
+    correcte_optie_index: number;
+    opties: unknown;
+    correct_getal: string | number | null;
+    getal_marge: string | number | null;
+  },
+  antwoord: { sessie: string; vraag_id: string; gekozen_index?: number; getal?: number },
+) {
+  if ((vraag.vraag_type ?? "tekst") === "getal") {
+    if (typeof antwoord.getal !== "number") return { juist: false, correcte_index: -1 };
+    const doel = Number(vraag.correct_getal ?? NaN);
+    const marge = Number(vraag.getal_marge ?? 0);
+    return {
+      juist: Number.isFinite(doel) && Math.abs(antwoord.getal - doel) <= marge + 1e-9,
+      correcte_index: -1,
+      correct_getal: Number.isFinite(doel) ? doel : null,
+    };
+  }
+  const { optiePermutatie } = await import("./academy-shuffle");
+  const n = ((vraag.opties as string[] | null) ?? []).length;
+  const perm = optiePermutatie(antwoord.sessie, antwoord.vraag_id, n);
+  const echt = perm[antwoord.gekozen_index ?? -1] ?? -1;
+  // Weergave-index van het juiste antwoord, zodat de browser het kan markeren.
+  const weergaveJuist = perm.indexOf(vraag.correcte_optie_index);
+  return { juist: echt === vraag.correcte_optie_index, correcte_index: weergaveJuist };
+}
 
 // ---------- Publiek: directe feedback op één antwoord ("Wist je dat?") ----------
 export const checkAntwoord = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
-      .object({ vraag_id: z.string().uuid(), gekozen_index: z.number().int().min(0).max(9) })
+      .object({
+        vraag_id: z.string().uuid(),
+        sessie: z.string().min(1).max(64),
+        gekozen_index: z.number().int().min(0).max(9).optional(),
+        getal: z.number().finite().optional(),
+      })
       .parse(d),
   )
   .handler(async ({ data }) => {
     const sql = db();
     const vraag = (
       (await sql`
-      select id, correcte_optie_index, wist_je_dat, wist_je_dat_fr, wist_je_dat_en
+      select id, correcte_optie_index, opties, vraag_type, correct_getal, getal_marge,
+             wist_je_dat, wist_je_dat_fr, wist_je_dat_en
         from academy_vragen
        where id = ${data.vraag_id}
        limit 1
     `) as Array<{
         correcte_optie_index: number;
+        opties: unknown;
+        vraag_type: string | null;
+        correct_getal: string | number | null;
+        getal_marge: string | number | null;
         wist_je_dat: string | null;
         wist_je_dat_fr: string | null;
         wist_je_dat_en: string | null;
@@ -192,9 +235,9 @@ export const checkAntwoord = createServerFn({ method: "POST" })
     )[0];
     if (!vraag) throw new Error("Vraag niet gevonden");
 
+    const oordeel = await beoordeel(vraag, data);
     return {
-      juist: vraag.correcte_optie_index === data.gekozen_index,
-      correcte_index: vraag.correcte_optie_index,
+      ...oordeel,
       wist_je_dat: vraag.wist_je_dat ?? null,
       wist_je_dat_fr: vraag.wist_je_dat_fr ?? null,
       wist_je_dat_en: vraag.wist_je_dat_en ?? null,
