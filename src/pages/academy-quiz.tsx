@@ -420,6 +420,7 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     const rows = vragenPerModule.get(m) ?? [];
     if (qIdx < rows.length - 1) {
       setQIdx((i) => i + 1);
+      setGetalInvoer("");
       return;
     }
     const ok = rows.filter((v) => feedback[v.id]?.juist).length;
@@ -484,7 +485,7 @@ export function AcademyQuiz({ slug }: { slug: string }) {
   const vraag = moduleVragen[qIdx];
   const fb = vraag ? feedback[vraag.id] : undefined;
   const feedbackTekst = fb ? wistJeDat(fb, lang) : null;
-  const allAnswered = vragen.every((v) => antwoorden[v.id] !== undefined);
+  const allAnswered = vragen.every((v) => feedback[v.id] !== undefined);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[color:var(--surface-page)] text-foreground">
