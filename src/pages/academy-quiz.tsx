@@ -320,7 +320,9 @@ export function AcademyQuiz({ slug }: { slug: string }) {
           volledige_naam: naam,
           antwoorden: vragen.map((v) =>
             v.vraag_type === "getal"
-              ? { vraag_id: v.id, getal: getallen[v.id] ?? Number.NaN }
+              ? Number.isFinite(getallen[v.id])
+                ? { vraag_id: v.id, getal: getallen[v.id] as number }
+                : { vraag_id: v.id }
               : { vraag_id: v.id, gekozen_index: antwoorden[v.id] ?? -1 },
           ),
         },
@@ -329,6 +331,7 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     onSuccess: (res) => {
       if (res.geslaagd) {
         toast.success(formatT(t("aca.passed"), { n: res.certificaat.volgnummer }));
+        confettiRegen();
         navigate({ to: "/certificaat/$id", params: { id: res.certificaat.id } });
       } else {
         toast.error(formatT(t("aca.failed"), { s: res.score }));
