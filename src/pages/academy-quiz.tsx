@@ -24,7 +24,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { lovable } from "@/integrations/lovable";
-import { Check, Loader2, Pencil, Save, Share2, Volume2, VolumeX, X } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  Pencil,
+  Save,
+  Share2,
+  ThumbsUp,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { AnimalIcon } from "@/lib/animal-glyph";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -36,6 +46,7 @@ import { kidsCertCode } from "@/lib/kids-cert";
 import { KidsCertificate } from "@/components/academy/KidsCertificate";
 import { handleImageError } from "@/lib/image-fallback";
 import { stashRedirect } from "@/lib/redirect";
+import { blijGeluid, confetti, confettiRegen } from "@/lib/celebrate";
 
 type Vraag = {
   id: string;
@@ -46,9 +57,12 @@ type Vraag = {
   opties_fr?: string[] | null;
   opties_en?: string[] | null;
   module?: number;
-  vraag_type?: "tekst" | "beeld" | "audio";
+  vraag_type?: "tekst" | "beeld" | "audio" | "getal";
   media_url?: string | null;
   media_alt?: string | null;
+  getal_eenheid?: string | null;
+  getal_eenheid_fr?: string | null;
+  getal_eenheid_en?: string | null;
 };
 type Academy = {
   id: string;
@@ -64,6 +78,7 @@ type Academy = {
 type Feedback = {
   juist: boolean;
   correcte_index: number;
+  correct_getal?: number | null;
   wist_je_dat?: string | null;
   wist_je_dat_fr?: string | null;
   wist_je_dat_en?: string | null;
@@ -138,8 +153,13 @@ export function AcademyQuiz({ slug }: { slug: string }) {
   const [academy, setAcademy] = useState<Academy | null>(null);
   const [vragen, setVragen] = useState<Vraag[]>([]);
   const [antwoorden, setAntwoorden] = useState<Record<string, number>>({});
+  /** Ingevulde getallen bij vragen van het type "getal". */
+  const [getallen, setGetallen] = useState<Record<string, number>>({});
+  const [getalInvoer, setGetalInvoer] = useState("");
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const [checking, setChecking] = useState(false);
+  /** Sessiesleutel: bepaalt de geschudde antwoordvolgorde op de server. */
+  const [sessie, setSessie] = useState("");
   const [moduleIdx, setModuleIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
   const [passedModules, setPassedModules] = useState<number[]>([]);
