@@ -498,6 +498,12 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     navigate({ to: pathFor("academy", lang) as never });
   }
 
+  // Bij het wisselen van vraag of ronde stopt het voorlezen meteen.
+  const stopSpeech = speech.stop;
+  useEffect(() => {
+    stopSpeech();
+  }, [moduleIdx, qIdx, stopSpeech]);
+
   if (!doelgroepReady || !doelgroep) {
     return (
       <DoelgroepKiezer
