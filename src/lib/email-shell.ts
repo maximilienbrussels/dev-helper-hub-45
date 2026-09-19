@@ -11,6 +11,7 @@
 import { MAIL_COPY, type MailLang } from "./email-copy";
 import { PUBLIC_SITE_URL, pathFor, type PageKey } from "./routes-i18n";
 import { CONTACT_EMAIL } from "./contact-emails";
+import { isCanonicalHost } from "./site-url";
 
 /* --------------------------------- Merk ---------------------------------- */
 
