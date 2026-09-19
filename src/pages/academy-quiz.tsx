@@ -85,20 +85,61 @@ type Feedback = {
 };
 
 const SPEECH_LANG: Record<string, string> = { nl: "nl-NL", fr: "fr-FR", en: "en-GB" };
+/** Voorleessnelheden: traag / normaal / snel. */
+export const SPEECH_RATES = [0.75, 0.95, 1.25] as const;
+const RATE_KEY = "academy.speechRate";
 
-/** Leest een tekst voor met de Web Speech API (indien beschikbaar). */
+/**
+ * Leest een tekst voor met de Web Speech API.
+ *
+ * Kiest per taal de best passende stem uit wat het toestel aanbiedt en meldt
+ * het wanneer die taal er niet bij zit (komt voor op sommige toestellen), zodat
+ * de knop niet stil lijkt te falen. De snelheid is instelbaar en wordt onthouden.
+ */
 function useSpeech(lang: string) {
   const [speaking, setSpeaking] = useState(false);
   const [supported, setSupported] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [rate, setRateState] = useState<number>(SPEECH_RATES[1]);
 
   useEffect(() => {
-    setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-    return () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    setSupported(true);
+    try {
+      const opgeslagen = Number(window.localStorage.getItem(RATE_KEY));
+      if (SPEECH_RATES.includes(opgeslagen as (typeof SPEECH_RATES)[number])) {
+        setRateState(opgeslagen);
       }
+    } catch {
+      /* opslag geblokkeerd — dan gewoon de standaardsnelheid */
+    }
+    const laad = () => setVoices(window.speechSynthesis.getVoices());
+    laad();
+    // Chrome levert de stemmenlijst pas asynchroon aan.
+    window.speechSynthesis.addEventListener("voiceschanged", laad);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", laad);
+      window.speechSynthesis.cancel();
     };
   }, []);
+
+  const setRate = useCallback((r: number) => {
+    setRateState(r);
+    try {
+      window.localStorage.setItem(RATE_KEY, String(r));
+    } catch {
+      /* opslag geblokkeerd */
+    }
+  }, []);
+
+  const doelTaal = SPEECH_LANG[lang] ?? "nl-NL";
+  const basis = doelTaal.slice(0, 2);
+  const stem =
+    voices.find((v) => v.lang?.replace("_", "-") === doelTaal) ??
+    voices.find((v) => v.lang?.slice(0, 2).toLowerCase() === basis) ??
+    null;
+  // Pas melden als de stemmenlijst effectief geladen is.
+  const stemOntbreekt = supported && voices.length > 0 && !stem;
 
   const stop = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -111,17 +152,18 @@ function useSpeech(lang: string) {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = SPEECH_LANG[lang] ?? "nl-NL";
-      u.rate = 0.95;
+      u.lang = doelTaal;
+      if (stem) u.voice = stem;
+      u.rate = rate;
       u.onend = () => setSpeaking(false);
       u.onerror = () => setSpeaking(false);
       setSpeaking(true);
       window.speechSynthesis.speak(u);
     },
-    [lang],
+    [doelTaal, stem, rate],
   );
 
-  return { speak, stop, speaking, supported };
+  return { speak, stop, speaking, supported, rate, setRate, stemOntbreekt };
 }
 
 /** Zet de pagina in focus-modus: geen footer/nav en geen achtergrond-scroll. */
