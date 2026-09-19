@@ -361,18 +361,53 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     }
   }
 
+  /** Viert een juist antwoord: uitbundig voor kinderen, ingetogen voor 16+. */
+  function vier(juist: boolean) {
+    if (!juist) return;
+    if (isKids) {
+      confetti({ y: 0.55, aantal: 60 });
+      blijGeluid();
+    }
+  }
+
   /** Antwoord kiezen: vergrendelt de vraag en haalt directe feedback op. */
   async function choose(vraag: Vraag, index: number) {
     if (feedback[vraag.id] || checking) return;
     setAntwoorden((a) => ({ ...a, [vraag.id]: index }));
     setChecking(true);
     try {
-      const res = await checkFn({ data: { vraag_id: vraag.id, gekozen_index: index } });
-      setFeedback((f) => ({ ...f, [vraag.id]: res as Feedback }));
+      const res = (await checkFn({
+        data: { vraag_id: vraag.id, sessie, gekozen_index: index },
+      })) as Feedback;
+      setFeedback((f) => ({ ...f, [vraag.id]: res }));
+      vier(res.juist);
     } catch {
       setFeedback((f) => ({
         ...f,
         [vraag.id]: { juist: true, correcte_index: index } as Feedback,
+      }));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  /** Getalvraag beantwoorden: enkel cijfers, met de marge die de server bewaakt. */
+  async function chooseGetal(vraag: Vraag) {
+    if (feedback[vraag.id] || checking) return;
+    const waarde = Number(getalInvoer.replace(",", "."));
+    if (!Number.isFinite(waarde)) return;
+    setGetallen((g) => ({ ...g, [vraag.id]: waarde }));
+    setChecking(true);
+    try {
+      const res = (await checkFn({
+        data: { vraag_id: vraag.id, sessie, getal: waarde },
+      })) as Feedback;
+      setFeedback((f) => ({ ...f, [vraag.id]: res }));
+      vier(res.juist);
+    } catch {
+      setFeedback((f) => ({
+        ...f,
+        [vraag.id]: { juist: true, correcte_index: -1 } as Feedback,
       }));
     } finally {
       setChecking(false);
