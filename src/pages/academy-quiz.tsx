@@ -85,20 +85,61 @@ type Feedback = {
 };
 
 const SPEECH_LANG: Record<string, string> = { nl: "nl-NL", fr: "fr-FR", en: "en-GB" };
+/** Voorleessnelheden: traag / normaal / snel. */
+export const SPEECH_RATES = [0.75, 0.95, 1.25] as const;
+const RATE_KEY = "academy.speechRate";
 
-/** Leest een tekst voor met de Web Speech API (indien beschikbaar). */
+/**
+ * Leest een tekst voor met de Web Speech API.
+ *
+ * Kiest per taal de best passende stem uit wat het toestel aanbiedt en meldt
+ * het wanneer die taal er niet bij zit (komt voor op sommige toestellen), zodat
+ * de knop niet stil lijkt te falen. De snelheid is instelbaar en wordt onthouden.
+ */
 function useSpeech(lang: string) {
   const [speaking, setSpeaking] = useState(false);
   const [supported, setSupported] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [rate, setRateState] = useState<number>(SPEECH_RATES[1]);
 
   useEffect(() => {
-    setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-    return () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    setSupported(true);
+    try {
+      const opgeslagen = Number(window.localStorage.getItem(RATE_KEY));
+      if (SPEECH_RATES.includes(opgeslagen as (typeof SPEECH_RATES)[number])) {
+        setRateState(opgeslagen);
       }
+    } catch {
+      /* opslag geblokkeerd — dan gewoon de standaardsnelheid */
+    }
+    const laad = () => setVoices(window.speechSynthesis.getVoices());
+    laad();
+    // Chrome levert de stemmenlijst pas asynchroon aan.
+    window.speechSynthesis.addEventListener("voiceschanged", laad);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", laad);
+      window.speechSynthesis.cancel();
     };
   }, []);
+
+  const setRate = useCallback((r: number) => {
+    setRateState(r);
+    try {
+      window.localStorage.setItem(RATE_KEY, String(r));
+    } catch {
+      /* opslag geblokkeerd */
+    }
+  }, []);
+
+  const doelTaal = SPEECH_LANG[lang] ?? "nl-NL";
+  const basis = doelTaal.slice(0, 2);
+  const stem =
+    voices.find((v) => v.lang?.replace("_", "-") === doelTaal) ??
+    voices.find((v) => v.lang?.slice(0, 2).toLowerCase() === basis) ??
+    null;
+  // Pas melden als de stemmenlijst effectief geladen is.
+  const stemOntbreekt = supported && voices.length > 0 && !stem;
 
   const stop = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -111,17 +152,18 @@ function useSpeech(lang: string) {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = SPEECH_LANG[lang] ?? "nl-NL";
-      u.rate = 0.95;
+      u.lang = doelTaal;
+      if (stem) u.voice = stem;
+      u.rate = rate;
       u.onend = () => setSpeaking(false);
       u.onerror = () => setSpeaking(false);
       setSpeaking(true);
       window.speechSynthesis.speak(u);
     },
-    [lang],
+    [doelTaal, stem, rate],
   );
 
-  return { speak, stop, speaking, supported };
+  return { speak, stop, speaking, supported, rate, setRate, stemOntbreekt };
 }
 
 /** Zet de pagina in focus-modus: geen footer/nav en geen achtergrond-scroll. */
@@ -456,6 +498,12 @@ export function AcademyQuiz({ slug }: { slug: string }) {
     navigate({ to: pathFor("academy", lang) as never });
   }
 
+  // Bij het wisselen van vraag of ronde stopt het voorlezen meteen.
+  const stopSpeech = speech.stop;
+  useEffect(() => {
+    stopSpeech();
+  }, [moduleIdx, qIdx, stopSpeech]);
+
   if (!doelgroepReady || !doelgroep) {
     return (
       <DoelgroepKiezer
@@ -592,31 +640,64 @@ export function AcademyQuiz({ slug }: { slug: string }) {
                   {vraagTekst(vraag, lang)}
                 </h1>
                 {speech.supported && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      speech.speaking
-                        ? speech.stop()
-                        : speech.speak(
-                            [vraagTekst(vraag, lang), ...vraagOpties(vraag, lang)].join(". "),
-                          )
-                    }
-                    aria-label={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
-                    title={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
-                    className={`grid size-11 shrink-0 place-items-center rounded-full border transition ${
-                      speech.speaking
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border text-muted-foreground hover:text-primary"
-                    }`}
-                  >
-                    {speech.speaking ? (
-                      <VolumeX className="size-5" />
-                    ) : (
-                      <Volume2 className="size-5" />
-                    )}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        speech.speaking
+                          ? speech.stop()
+                          : speech.speak(
+                              [
+                                vraagTekst(vraag, lang),
+                                ...vraagOpties(vraag, lang),
+                                feedbackTekst ?? "",
+                              ]
+                                .filter(Boolean)
+                                .join(". "),
+                            )
+                      }
+                      aria-label={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
+                      title={speech.speaking ? t("aca.stopListen") : t("aca.listen")}
+                      className={`grid size-11 shrink-0 place-items-center rounded-full border transition ${
+                        speech.speaking
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:text-primary"
+                      }`}
+                    >
+                      {speech.speaking ? (
+                        <VolumeX className="size-5" />
+                      ) : (
+                        <Volume2 className="size-5" />
+                      )}
+                    </button>
+                    {/* Voorleessnelheid: traag → normaal → snel, wordt onthouden. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const i = SPEECH_RATES.indexOf(
+                          speech.rate as (typeof SPEECH_RATES)[number],
+                        );
+                        const next = SPEECH_RATES[(i + 1) % SPEECH_RATES.length] ?? 0.95;
+                        speech.setRate(next);
+                        speech.stop();
+                      }}
+                      aria-label={t("aca.speed")}
+                      title={t("aca.speed")}
+                      className="h-11 shrink-0 rounded-full border border-border px-3 text-xs font-semibold text-muted-foreground transition hover:text-primary"
+                    >
+                      {speech.rate === SPEECH_RATES[0]
+                        ? t("aca.speed.slow")
+                        : speech.rate === SPEECH_RATES[2]
+                          ? t("aca.speed.fast")
+                          : t("aca.speed.normal")}
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {speech.stemOntbreekt && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("aca.noVoice")}</p>
+              )}
 
               {vraag.vraag_type === "beeld" && vraag.media_url && (
                 <img onError={handleImageError}

@@ -7,12 +7,18 @@
  * eigen configuratie valt alles terug op een generieke, correcte tekst.
  */
 
+import { CANONICAL_SITE_URL } from "./site-url";
+
 export type CertLang = "nl" | "fr" | "en";
 
 export type CertModule = { titel: string; body: string };
 
-/** Publieke canonieke basis voor de QR-verificatie (ook geldig op papier). */
-export const CERT_VERIFY_BASE = "https://maximilien.brussels/verifieer";
+/**
+ * Publieke canonieke basis voor de QR-verificatie (ook geldig op papier).
+ * Volgt het ingestelde canonieke domein, nooit het preview-adres van het
+ * moment: een gedrukt certificaat moet jaren later nog verifieerbaar zijn.
+ */
+export const CERT_VERIFY_BASE = `${CANONICAL_SITE_URL}/verifieer`;
 
 export function certVerifyUrl(token: string | null | undefined, fallbackId: string) {
   return `${CERT_VERIFY_BASE}?id=${encodeURIComponent(token || fallbackId)}`;

@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { neonSupabaseCompat as supabase } from "@/lib/neon-auth-compat";
 import { handleImageError } from "@/lib/image-fallback";
 import { stashRedirect } from "@/lib/redirect";
+import { CANONICAL_SITE_URL } from "@/lib/site-url";
 
 /**
  * Houdt het certificaat 100% vloeiend: meet de beschikbare breedte en zet de
@@ -230,16 +231,18 @@ function CertificaatPage() {
       evidence: verifyUrl,
       badge: {
         type: "BadgeClass",
-        id: `${origin}/academy`,
+        // Een badge blijft jaren geldig: altijd het canonieke domein, nooit
+        // het toevallige adres van deze browsersessie.
+        id: `${CANONICAL_SITE_URL}/academy`,
         name: `${academyLabel} Academy`,
         description: formatT(ct("cert.completedBody"), { name: academyLabel }),
-        image: `${origin}/favicon.ico`,
+        image: `${CANONICAL_SITE_URL}/favicon.ico`,
         criteria: { narrative: `${ct("cert.score")} ${certificaat.score}` },
         issuer: {
           type: "Profile",
-          id: origin || "https://maximilien.brussels",
+          id: CANONICAL_SITE_URL,
           name: "Maxilien",
-          url: origin || "https://maximilien.brussels",
+          url: CANONICAL_SITE_URL,
         },
       },
     };
