@@ -13,7 +13,7 @@ export type SelectieVraag = {
 export type SelectieOpties = {
   /** "kids" = één ronde, "16plus" = drie rondes. */
   doelgroep: "kids" | "16plus";
-  /** Totaal aantal vragen in de test. */
+  /** Gewenst aantal vragen in de test (kan lager uitvallen bij te weinig aanbod). */
   aantal: number;
 };
 
@@ -22,9 +22,22 @@ export function aantalRondes(doelgroep: "kids" | "16plus"): number {
   return doelgroep === "kids" ? 1 : 3;
 }
 
-/** Houdt hoogstens één vraag per variantgroep over binnen dezelfde ronde. */
-function zonderDubbeleVarianten<T extends SelectieVraag>(rijen: T[]): T[] {
-  const gezien = new Set<string>();
+/** Vragen die bij dit spoor horen ("beide" telt voor allebei). */
+export function voorSpoor<T extends SelectieVraag>(
+  alle: T[],
+  doelgroep: "kids" | "16plus",
+): T[] {
+  return alle.filter((v) => {
+    const d = (v.doelgroep ?? "beide").trim() || "beide";
+    return d === doelgroep || d === "beide";
+  });
+}
+
+/**
+ * Houdt hoogstens één vraag per variantgroep over. `gezien` wordt gedeeld over
+ * de rondes heen, zodat niemand dezelfde vraag anders verwoord terugkrijgt.
+ */
+function zonderDubbeleVarianten<T extends SelectieVraag>(rijen: T[], gezien: Set<string>): T[] {
   const uit: T[] = [];
   for (const v of rijen) {
     const groep = v.variant_groep?.trim();
@@ -37,29 +50,39 @@ function zonderDubbeleVarianten<T extends SelectieVraag>(rijen: T[]): T[] {
   return uit;
 }
 
+/** Oplopend in moeilijkheid: ronde 1 het makkelijkst, ronde 3 het zwaarst. */
+function opMoeilijkheid<T extends SelectieVraag>(rijen: T[], oplopend: boolean): T[] {
+  return [...rijen].sort((a, b) => {
+    const x = a.moeilijkheid ?? 2;
+    const y = b.moeilijkheid ?? 2;
+    return oplopend ? x - y : y - x;
+  });
+}
+
 /**
  * Kiest de vragen voor één examenpoging.
  *
- * - enkel vragen van het gekozen spoor (of "beide");
- * - verplichte vragen komen altijd mee;
- * - hoogstens één vraag per variantgroep per ronde;
- * - de rest wordt willekeurig getrokken uit de voorraad, oplopend in
- *   moeilijkheid per ronde bij het 16+-spoor.
+ * - uitsluitend vragen van het gekozen spoor (of "beide"); bij te weinig
+ *   aanbod wordt de test korter in plaats van dat er vragen van een andere
+ *   leeftijd binnensluipen;
+ * - verplichte vragen komen altijd eerst;
+ * - hoogstens één vraag per variantgroep in de héle test;
+ * - bij 16+ drie rondes die oplopen in moeilijkheid.
  */
 export function kiesVragen<T extends SelectieVraag>(alle: T[], opties: SelectieOpties): T[] {
-  const spoor = alle.filter((v) => {
-    const d = v.doelgroep ?? "beide";
-    return d === opties.doelgroep || d === "beide";
-  });
-  const pool = spoor.length >= Math.min(3, opties.aantal) ? spoor : alle;
+  const pool = voorSpoor(alle, opties.doelgroep);
   const rondes = aantalRondes(opties.doelgroep);
+  const gezieneVarianten = new Set<string>();
 
   if (rondes === 1) {
-    const kandidaten = zonderDubbeleVarianten([
-      ...shuffle(pool.filter((v) => v.verplicht)),
-      ...shuffle(pool.filter((v) => !v.verplicht)),
-    ]);
-    return kandidaten.slice(0, opties.aantal).map((v, i) => ({ ...v, module: 1, _pos: i }) as T);
+    const kandidaten = zonderDubbeleVarianten(
+      [
+        ...shuffle(pool.filter((v) => v.verplicht)),
+        ...opMoeilijkheid(shuffle(pool.filter((v) => !v.verplicht)), true),
+      ],
+      gezieneVarianten,
+    );
+    return kandidaten.slice(0, opties.aantal).map((v) => ({ ...v, module: 1 }) as T);
   }
 
   const perRonde = Math.max(1, Math.round(opties.aantal / rondes));
@@ -68,17 +91,24 @@ export function kiesVragen<T extends SelectieVraag>(alle: T[], opties: SelectieO
 
   for (const m of [1, 2, 3]) {
     const vanRonde = pool.filter((v) => (v.module ?? 1) === m && !gebruikt.has(v.id));
-    const kandidaten = zonderDubbeleVarianten([
-      ...shuffle(vanRonde.filter((v) => v.verplicht)),
-      ...shuffle(vanRonde.filter((v) => !v.verplicht)),
-    ]).slice(0, perRonde);
+    const kandidaten = zonderDubbeleVarianten(
+      [
+        ...shuffle(vanRonde.filter((v) => v.verplicht)),
+        ...opMoeilijkheid(shuffle(vanRonde.filter((v) => !v.verplicht)), m < 3),
+      ],
+      gezieneVarianten,
+    ).slice(0, perRonde);
     for (const v of kandidaten) gebruikt.add(v.id);
     gekozen.push(...kandidaten.map((v) => ({ ...v, module: m }) as T));
   }
 
-  // Rondes die te weinig eigen vragen hebben, aanvullen uit de rest.
+  // Rondes met te weinig eigen vragen aanvullen uit de overige vragen van
+  // hetzelfde spoor — nooit uit een ander leeftijdsspoor.
   if (gekozen.length < opties.aantal) {
-    const rest = zonderDubbeleVarianten(shuffle(pool.filter((v) => !gebruikt.has(v.id))));
+    const rest = zonderDubbeleVarianten(
+      shuffle(pool.filter((v) => !gebruikt.has(v.id))),
+      gezieneVarianten,
+    );
     for (const v of rest) {
       if (gekozen.length >= opties.aantal) break;
       const telPerRonde = [1, 2, 3].map((m) => gekozen.filter((g) => g.module === m).length);
