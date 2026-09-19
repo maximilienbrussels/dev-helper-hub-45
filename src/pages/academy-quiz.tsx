@@ -1164,3 +1164,12 @@ function DoelgroepKiezer({
     </div>
   );
 }
+
+/** Eenheid bij een getalvraag ("keer per dag", "gram", …) in de juiste taal. */
+function getalEenheid(
+  v: { getal_eenheid?: string | null; getal_eenheid_fr?: string | null; getal_eenheid_en?: string | null },
+  lang: ReturnType<typeof useT>["lang"],
+): string {
+  const byLang = lang === "fr" ? v.getal_eenheid_fr : lang === "en" ? v.getal_eenheid_en : null;
+  return (byLang && byLang.trim()) || (v.getal_eenheid ?? "").trim();
+}
