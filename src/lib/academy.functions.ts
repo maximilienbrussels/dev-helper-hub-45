@@ -127,7 +127,11 @@ export const startExamen = createServerFn({ method: "POST" })
     const gewenst =
       (data.doelgroep === "kids" ? academy.vragen_per_test_kids : academy.vragen_per_test_16plus) ??
       academy.vragen_per_test;
-    const aantal = Math.max(1, Math.min(gewenst, (vragen ?? []).length || gewenst));
+    // Enkel vragen van dit leeftijdsspoor tellen mee: liever een kortere test
+    // dan vragen die niet bij de leeftijd passen.
+    const { voorSpoor } = await import("./academy-selectie");
+    const spoorPool = voorSpoor(vragen ?? [], data.doelgroep);
+    const aantal = Math.max(1, Math.min(gewenst, spoorPool.length || gewenst));
     const slaagGrens =
       (data.doelgroep === "kids" ? academy.slaag_grens_kids : academy.slaag_grens_16plus) ??
       academy.slaag_grens;
